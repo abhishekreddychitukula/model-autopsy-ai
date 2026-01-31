@@ -5,11 +5,18 @@ from fastapi import UploadFile
 import io
 
 def normalize_columns(df):
-    """Normalize column names to prevent hidden whitespace/case issues"""
+    """
+    Normalize column names to prevent hidden whitespace/case/encoding issues.
+    Production-safe: handles BOM, unicode, whitespace, and case sensitivity.
+    """
     df.columns = (
         df.columns
-        .str.strip()
-        .str.lower()
+        .astype(str)                           # Ensure all are strings
+        .str.strip()                           # Remove leading/trailing whitespace
+        .str.lower()                           # Lowercase for consistency
+        .str.replace('\ufeff', '', regex=False)  # Remove BOM (Byte Order Mark)
+        .str.replace('\u200b', '', regex=False)  # Remove zero-width space
+        .str.replace(r'\s+', ' ', regex=True)    # Normalize internal whitespace
     )
     return df
 
@@ -39,10 +46,17 @@ async def load_and_validate(
         old_content = await old.read()
         new_content = await new.read()
         
-        # Parse CSV from bytes
-        train_df = pd.read_csv(io.BytesIO(train_content))
-        old_df = pd.read_csv(io.BytesIO(old_content))
-        new_df = pd.read_csv(io.BytesIO(new_content))
+        # Parse CSV from bytes with encoding handling
+        # Try UTF-8 first (most common), fallback to latin1 which accepts anything
+        train_df = pd.read_csv(io.BytesIO(train_content), encoding='utf-8-sig')  # utf-8-sig removes BOM
+        old_df = pd.read_csv(io.BytesIO(old_content), encoding='utf-8-sig')
+        new_df = pd.read_csv(io.BytesIO(new_content), encoding='utf-8-sig')
+    except UnicodeDecodeError:
+        # Fallback to latin1 if UTF-8 fails
+        print("⚠️ UTF-8 failed, trying latin1 encoding...")
+        train_df = pd.read_csv(io.BytesIO(train_content), encoding='latin1')
+        old_df = pd.read_csv(io.BytesIO(old_content), encoding='latin1')
+        new_df = pd.read_csv(io.BytesIO(new_content), encoding='latin1')
     except Exception as e:
         raise ValueError(f"CSV parsing failed: {str(e)}")
 
@@ -51,6 +65,13 @@ async def load_and_validate(
     old_df = normalize_columns(old_df)
     new_df = normalize_columns(new_df)
 
+    # DEBUG: Log columns for production debugging (helps diagnose invisible characters)
+    print("🔍 DEBUG - Column comparison:")
+    print(f"  TRAIN columns: {list(train_df.columns)}")
+    print(f"  OLD columns:   {list(old_df.columns)}")
+    print(f"  NEW columns:   {list(new_df.columns)}")
+    print(f"  TRAIN repr: {repr(list(train_df.columns)[:3])}")  # Show raw representation
+    
     train_cols = set(train_df.columns)
     old_cols = set(old_df.columns)
     new_cols = set(new_df.columns)
@@ -72,7 +93,15 @@ async def load_and_validate(
         if extra_in_new:
             error_msg += f"Extra in prod_new: {extra_in_new}\n"
         
+        # Add debug info
+        error_msg += f"\n[DEBUG] Train columns: {list(train_df.columns)}\n"
+        error_msg += f"[DEBUG] Old columns: {list(old_df.columns)}\n"
+        error_msg += f"[DEBUG] New columns: {list(new_df.columns)}"
+        
+        print(f"❌ VALIDATION FAILED:\n{error_msg}")
         raise ValueError(error_msg.strip())
+    
+    print(f"✅ Column validation passed: {len(train_cols)} columns match across all files")
     
     # Reorder columns to match training data for consistency
     train_col_order = list(train_df.columns)
