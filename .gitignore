@@ -63,6 +63,5 @@ htmlcov/
 .pytest_cache/
 
 *.log
-*.txt
-backend_function_call_logs.txt
+function_called.txt
 
