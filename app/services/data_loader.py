@@ -51,18 +51,33 @@ async def load_and_validate(
     old_df = normalize_columns(old_df)
     new_df = normalize_columns(new_df)
 
-    train_cols = list(train_df.columns)
-    old_cols = list(old_df.columns)
-    new_cols = list(new_df.columns)
+    train_cols = set(train_df.columns)
+    old_cols = set(old_df.columns)
+    new_cols = set(new_df.columns)
 
-    # Check column equality (ORDER + NAMES) for all three files
+    # Check that all files have the same columns (order doesn't matter)
     if train_cols != old_cols or train_cols != new_cols:
-        raise ValueError(
-            f"Column mismatch detected.\n"
-            f"Train: {train_cols}\n"
-            f"Old: {old_cols}\n"
-            f"New: {new_cols}"
-        )
+        missing_in_old = train_cols - old_cols
+        missing_in_new = train_cols - new_cols
+        extra_in_old = old_cols - train_cols
+        extra_in_new = new_cols - train_cols
+        
+        error_msg = "Column mismatch detected.\n"
+        if missing_in_old:
+            error_msg += f"Missing in prod_old: {missing_in_old}\n"
+        if missing_in_new:
+            error_msg += f"Missing in prod_new: {missing_in_new}\n"
+        if extra_in_old:
+            error_msg += f"Extra in prod_old: {extra_in_old}\n"
+        if extra_in_new:
+            error_msg += f"Extra in prod_new: {extra_in_new}\n"
+        
+        raise ValueError(error_msg.strip())
+    
+    # Reorder columns to match training data for consistency
+    train_col_order = list(train_df.columns)
+    old_df = old_df[train_col_order]
+    new_df = new_df[train_col_order]
 
     # Validation: Check for empty dataframes
     if train_df.empty or old_df.empty or new_df.empty:

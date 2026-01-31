@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { Microscope, Github, FileText } from "lucide-react";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
 function Header({ onReset, hasReport }) {
   return (
     <motion.header
@@ -39,7 +41,7 @@ function Header({ onReset, hasReport }) {
               </motion.button>
             )}
             <a
-              href="http://127.0.0.1:8000/docs"
+              href={`${API_URL}/docs`}
               target="_blank"
               rel="noopener noreferrer"
               className="p-2 text-gray-600 hover:text-purple-600 transition-colors"

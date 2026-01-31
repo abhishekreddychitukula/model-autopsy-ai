@@ -6,6 +6,9 @@ import LoadingScreen from "./components/LoadingScreen";
 import Dashboard from "./components/Dashboard";
 import LandingHero from "./components/LandingHero";
 
+// API URL configuration - change this when deploying
+const API_URL = import.meta.env.VITE_API_URL || "/api";
+
 function App() {
   const [files, setFiles] = useState({
     train: null,
@@ -42,7 +45,7 @@ function App() {
     });
 
     try {
-      const response = await fetch("/api/run-autopsy", {
+      const response = await fetch(`${API_URL}/run-autopsy`, {
         method: "POST",
         body: formData,
       });

@@ -1,7 +1,9 @@
 """Main FastAPI application entry point"""
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.api.routes import router
+import traceback
 
 app = FastAPI(
     title="Model Autopsy AI",
@@ -18,7 +20,23 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch all exceptions and return proper error response"""
+    error_detail = str(exc)
+    print(f"ERROR: {error_detail}")
+    print(traceback.format_exc())
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": error_detail,
+            "detail": error_detail if error_detail else "Analysis failed. Please check your files."
+        }
+    )
 
 app.include_router(router)
 
