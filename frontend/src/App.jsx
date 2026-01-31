@@ -5,9 +5,7 @@ import FileUpload from "./components/FileUpload";
 import LoadingScreen from "./components/LoadingScreen";
 import Dashboard from "./components/Dashboard";
 import LandingHero from "./components/LandingHero";
-
-// API URL configuration - change this when deploying
-const API_URL = import.meta.env.VITE_API_URL || "/api";
+import { API_URL } from "./config";
 
 function App() {
   const [files, setFiles] = useState({
@@ -43,9 +41,13 @@ function App() {
       prod_old: files.prod_old.name,
       prod_new: files.prod_new.name,
     });
+    console.log("🔗 Using API URL:", API_URL);
 
     try {
-      const response = await fetch(`${API_URL}/run-autopsy`, {
+      const fullUrl = `${API_URL}/run-autopsy`;
+      console.log("📡 Fetching:", fullUrl);
+      
+      const response = await fetch(fullUrl, {
         method: "POST",
         body: formData,
       });
@@ -55,21 +57,41 @@ function App() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error("Error response:", errorData);
-        throw new Error(
-          errorData.detail ||
-            "Analysis failed. Please check your files and ensure they have the same columns.",
-        );
+        
+        // Better error message with debugging info
+        let errorMessage = errorData.detail || errorData.error || "Analysis failed";
+        
+        // Add helpful context for common errors
+        if (response.status === 404) {
+          errorMessage = `Backend not found. Check that:\n1. Backend URL is correct: ${API_URL}\n2. Backend is deployed and running\n3. VITE_API_URL is set in deployment`;
+        } else if (response.status === 500) {
+          errorMessage = `Server error: ${errorMessage}\n\nThis might be:\n- Column mismatch in CSV files\n- Missing GROQ_API_KEY\n- Backend error (check backend logs)`;
+        } else if (response.status === 0 || !response.status) {
+          errorMessage = `Cannot reach backend at ${API_URL}\n\nCheck:\n1. Backend is deployed and running\n2. CORS is enabled\n3. URL is correct`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
-      console.log("Analysis complete:", data);
+      console.log("✅ Analysis complete:", data);
       setReport(data);
     } catch (err) {
-      console.error("Error:", err);
-      setError(
-        err.message ||
-          "Failed to analyze model. Please check the browser console for details.",
-      );
+      console.error("❌ Error:", err);
+      
+      // Network error (can't reach server)
+      if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
+        setError(
+          `Cannot connect to backend at ${API_URL}\n\n` +
+          `Possible issues:\n` +
+          `1. Backend is not deployed or not running\n` +
+          `2. Wrong backend URL (check config.js or VITE_API_URL)\n` +
+          `3. CORS is blocking the request\n\n` +
+          `Current API URL: ${API_URL}`
+        );
+      } else {
+        setError(err.message || "Failed to analyze model. Check console for details.");
+      }
     } finally {
       setLoading(false);
     }
